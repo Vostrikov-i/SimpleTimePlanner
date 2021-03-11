@@ -35,6 +35,7 @@ class ViewMapping:
 colorBindings = ("state", QBrush(QColor(229, 229, 229)),
                  ("RUN", QBrush(Qt.green)))
 
+
 class Task:
     def __init__(self, taskName, dateStart, workTime, observer):
         self.__taskName = taskName
@@ -95,7 +96,7 @@ class Task:
         if self.state != "RUN":
             self.state = "RUN"
             self.__observer.notify(self, ["state"])  # notify storage once
-        self.__observer.notify(self, ["workTime"]) # notify storage
+        self.__observer.notify(self, ["workTime"])  # notify storage
         self.__Timer = threading.Timer(self.__timeout, self.startTask)
         self.__Timer.start()
 
@@ -103,13 +104,13 @@ class Task:
         if self.state == "RUN" and self.__Timer is not None and self.__Timer.is_alive():
             self.__Timer.cancel()
         self.state = "PAUSED"
-        self.__observer.notify(self, ["state"]) # notify storage
+        self.__observer.notify(self, ["state"])  # notify storage
 
     def stopTask(self):
         if self.__Timer is not None and self.__Timer.is_alive():
             self.__Timer.cancel()
         self.state = "STOP"
-        self.__dateEnd = str(time.mktime(datetime.datetime.utcnow().timetuple()))
+        self.__dateEnd = int(time.time())
         self.__observer.notify(self, ["state", "dateEnd"])  # notify storage
 
 
@@ -141,17 +142,16 @@ class DBConnector:
             conn = sqlite3.connect(self.__dbPath)
             c = conn.cursor()
             insTableFields = ""
-            for field in tableFields: # Fields to Insert
+            for field in tableFields:  # Fields to Insert
                 insTableFields = insTableFields + field + ", "
-            insTableFields=insTableFields[:-2] # Remove 2 last symbols
+            insTableFields = insTableFields[:-2]  # Remove 2 last symbols
             tmp = len(taskValue)  # начали формировать значения для вставки в таблицу
             insTableValues = ""
-            for value in taskValue: # Values to insert
+            for value in taskValue:  # Values to insert
                 insTableValues = insTableValues + " ?, "
-            insTableValues = insTableValues[:-2] # Remove 2 last symbols
+            insTableValues = insTableValues[:-2]  # Remove 2 last symbols
             # закончили формировать значения для вставки в таблицу
             sqlQuery = f"INSERT INTO {self.__tableName} ({insTableFields}) VALUES({insTableValues})"
-            print (sqlQuery)
             c.execute(sqlQuery, taskValue)
             conn.commit();
             id = c.lastrowid;  # получили ID вставленной задачи
@@ -169,7 +169,7 @@ class DBConnector:
         updateValues = ""
         for key in keys:
             updateValues = updateValues + str(key) + "=\'" + str(update[key]) + "\', "
-        updateValues=updateValues[:-2] # Remove 2 last symbols
+        updateValues = updateValues[:-2]  # Remove 2 last symbols
 
         if condition != "":
             sqlQuery = f"UPDATE {str(self.__tableName)} SET {updateValues} WHERE {condition}"
@@ -213,7 +213,7 @@ class DBConnector:
                                      None))  # checking that table contains all fields in dbFields
         if not (None in result_names):
             results = []
-            for row in c: # c contain result rows for select query
+            for row in c:  # c contain result rows for select query
                 fields = [field for field in fields_names]
                 values = [values for values in row]
                 results.append(zip(fields, values))
@@ -222,6 +222,7 @@ class DBConnector:
         else:
             conn.close()
             return None
+
 
 class TaskStorage:
     def __init__(self, dBConnector, ormMapping):
@@ -255,7 +256,7 @@ class TaskStorage:
 
     def addTask(self, taskName):
         insertFields = ["Name", "DateStart", "State", "WorkTime"]
-        startTime = str(time.mktime(datetime.datetime.utcnow().timetuple()))
+        startTime = int(time.time())  # str(time.mktime(datetime.datetime.utcnow().timetuple()))
         insertValues = [str(taskName), startTime, "", 0]
         task = Task(taskName, startTime, 0, self)
         task.taskId = self.__dBConnector.add(insertFields, insertValues)
@@ -340,7 +341,14 @@ class TaskStorage:
     def viewFinishedTaskBetweenDate(self, dateStart, dateEnd):
         self.__applyFilter(
             lambda task: task[1].dateEnd != None and int(float(task[1].dateEnd)) >= int(float(dateStart)) and int(
-                float(task[1].dateEnd)) <= int(float(dateEnd)))
+                float(task[1].dateEnd)) <= int(float(dateEnd+86399))) # 86400 - seconds per day, bcs time in dateEnd start with 00:00:00
+                                                                     # now time in dateEnd is 23:59:59
+    def getTotalWorkTime(self):
+        summTime=0
+        for task in self.__filteredList.values():
+            summTime +=task.workTime
+        return summTime
+        #return sum(self.__filteredList.values().workTime)
 
     # task notify taskStorage about change data
     def notify(self, object, propertyes):
@@ -359,22 +367,28 @@ class TaskStorage:
                 self.__dBConnector.update(updates, condition)
                 if self.__applyedFilter != None:  # refresh __filteredList
                     self.__applyFilter(self.__applyedFilter)
-                if self.__Model != None: # refresh model
+                if self.__Model != None:  # refresh model
                     self.__Model.dataChangedInternaly()
+
 
 class TaskModel(QAbstractTableModel):
 
-    def __init__(self, taskStorage, ormMapping, buttonData=[]):
+    def __init__(self, taskStorage, ormMapping, appendRow=0, buttonData=[]):
         super(TaskModel, self).__init__()
         self.__taskStorage = taskStorage
+        self.__appendRow = appendRow
         self.__buttonData = buttonData
         self.__ormMapping = ormMapping
+        self.__appendData= []
         # create header sign
         self.__taskProp = list(filter(lambda x: x.viewMappingType == ViewMapping.SHOW and type(x.viewHeaderSign) == str,
                                       self.__ormMapping))
 
+    def setAppendData(self,  appendData=[]):
+        self.__appendData = appendData
+
     def rowCount(self, index=QModelIndex()):
-        return self.__taskStorage.getElementCount()
+        return self.__taskStorage.getElementCount()+self.__appendRow
 
     def columnCount(self, index=QModelIndex()):
         return len(self.__taskProp) + len(self.__buttonData)  # task column + action buttons
@@ -382,9 +396,23 @@ class TaskModel(QAbstractTableModel):
     def setAllTaskView(self):
         self.__taskStorage.viewActiveTask()
 
+    def switchToAllDataView(self):
+            self.__taskStorage.viewAllFinishedTask()
+
+    def switchToFilterData(self, dateStart, dateEnd):
+            self.__taskStorage.viewFinishedTaskBetweenDate(dateStart, dateEnd)
+
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
+        if role == Qt.DisplayRole:
+            for data in self.__appendData:
+                if index.row() == (data.rowNum-1) and index.column() == data.colNum:
+                    if data.formatFunction is not None:
+                        return data.formatFunction(data.viewFunction())
+                    else:
+                        return data.viewFunction()
+
         if not 0 <= index.row() < self.__taskStorage.getElementCount():
             return None
 
@@ -394,7 +422,7 @@ class TaskModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             if (j < len(self.__taskProp)):
                 value = getattr(task, self.__taskProp[j].objectPropertyName, None)
-                if (self.__taskProp[j].formatFunction != None): # apply format function
+                if (self.__taskProp[j].formatFunction != None):  # apply format function
                     func = self.__taskProp[j].formatFunction
                     value = func(value)
                 return value
@@ -435,94 +463,11 @@ class TaskModel(QAbstractTableModel):
     # get clicked task id for delegate
     def getClickedTaskId(self, idsPropertyName, rowNum):
         task = self.__taskStorage.getTaskByNum(rowNum)
-        value = getattr(task, idsPropertyName, None)  #  return id
+        value = getattr(task, idsPropertyName, None)  # return id
         return value
 
     def getHeaderLenght(self):
         return len(self.__taskProp)
-
-
-class FinishedTaskModel(QAbstractTableModel):
-    # When subclassing QAbstractTableModel, you must implement rowCount(), columnCount(), and data().
-    def __init__(self, taskStorage, ormMapping, buttonData=[], parent=None, ):
-        super(FinishedTaskModel, self).__init__()
-        self.__taskStorage = taskStorage
-        self.__buttonData = buttonData
-        self.__ormMapping = ormMapping
-        self.__taskProp = list(filter(lambda x: x.viewMappingType == ViewMapping.SHOW and type(x.viewHeaderSign) == str,
-                                      self.__ormMapping))
-
-    def switchToAllDataView(self):
-        self.__taskStorage.viewAllFinishedTask()
-
-    def switchToFilterData(self, dateStart, dateEnd):
-        self.__taskStorage.viewFinishedTaskBetweenDate(dateStart, dateEnd)
-
-    def rowCount(self, index=QModelIndex()):
-        return self.__taskStorage.getElementCount()
-
-    def columnCount(self, index=QModelIndex()):
-        return len(self.__taskProp) + len(self.__buttonData)  # поля задачи + кнопки для управления задачей
-
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-        if not 0 <= index.row() < self.__taskStorage.getElementCount():
-            return None
-
-        i = index.row()
-        j = index.column()
-        task = self.__taskStorage.getTaskByNum(i)
-
-        if role == Qt.DisplayRole:
-            if (j < len(self.__taskProp)):
-                value = getattr(task, self.__taskProp[j].objectPropertyName, None)
-                if (self.__taskProp[j].formatFunction != None):
-                    func = self.__taskProp[j].formatFunction
-                    value = func(value)
-                return value
-            elif len(self.__taskProp) <= j < len(self.__taskProp) + len(self.__buttonData):
-                return self.__buttonData[j - len(self.__taskProp)]
-        if role == Qt.BackgroundRole:
-
-            propetyColor = colorBindings[0]
-            defaultColor = colorBindings[1]
-            dictColors = dict()
-            for color in colorBindings:
-                if type(color) is tuple:
-                    dictColors[color[0]] = color[1]
-
-            for key in dictColors.keys():
-                if hasattr(task, propetyColor):
-                    if getattr(task, propetyColor, None) == key:
-                        return dictColors[key]
-            return defaultColor
-        return None
-
-    def headerData(self, p_int, orientation, role=None):
-        if role != Qt.DisplayRole:
-            return None
-
-        if orientation == Qt.Horizontal:
-            if 0 <= p_int < len(self.__taskProp):
-                return self.__taskProp[p_int].viewHeaderSign
-        return None
-
-    def update(self):
-        self.layoutAboutToBeChanged.emit()
-        self.layoutChanged.emit()
-
-    def dataChangedInternaly(self):
-        self.dataChanged.emit(QModelIndex, QModelIndex, (Qt.BackgroundRole or Qt.DisplayRole))
-
-    def getClickedTaskId(self, idsPropertyName, rowNum):
-        task = self.__taskStorage.getTaskByNum(rowNum)
-        value = getattr(task, idsPropertyName, None)
-        return value
-
-    def getHeaderLenght(self):
-        return len(self.__taskProp)
-
 
 class StartButtonDelegate(QStyledItemDelegate):
 
@@ -540,10 +485,10 @@ class StartButtonDelegate(QStyledItemDelegate):
         opt.rect = option.rect
         opt.palette = option.palette
         task = self.__taskStorage.getTaskByNum(index.row())
-        if task.state!="RUN":
+        if task.state != "RUN":
             opt.state = QStyle.State_Enabled | QStyle.State_Raised
         else:
-            opt.state = QStyle.State_Enabled |  QStyle.State_Sunken
+            opt.state = QStyle.State_Enabled | QStyle.State_Sunken
         QApplication.style().drawControl(QStyle.CE_PushButton, opt, painter)
         painter.restore()
 
@@ -647,14 +592,15 @@ class DeleteButtonDelegate(QStyledItemDelegate):
         self.__btn = QStyleOptionButton()
 
     def paint(self, painter, option, index):
-        painter.save()
-        opt = QStyleOptionButton()
-        opt.text = str(index.data())
-        opt.rect = option.rect
-        opt.palette = option.palette
-        opt.state = QStyle.State_Enabled | QStyle.State_Raised
-        QApplication.style().drawControl(QStyle.CE_PushButton, opt, painter)
-        painter.restore()
+        if index.data() is not None:
+            painter.save()
+            opt = QStyleOptionButton()
+            opt.text = str(index.data())
+            opt.rect = option.rect
+            opt.palette = option.palette
+            opt.state = QStyle.State_Enabled | QStyle.State_Raised
+            QApplication.style().drawControl(QStyle.CE_PushButton, opt, painter)
+            painter.restore()
 
     def editorEvent(self, event, model, option, index):
         if event.type() == QEvent.MouseButtonPress:
@@ -672,15 +618,13 @@ class DeleteButtonDelegate(QStyledItemDelegate):
         else:
             return super(DeleteButtonDelegate, self).editorEvent(event, model, option, index)
 
-
-
 class OrmSettings:
     def __init__(self, dbFieldName, objectPropertyName, objectPropertyType, dbFieldDataType, dbFieldType,
                  viewMappingType=ViewMapping.IGNORE, viewHeaderSign="", formatFunction=None):
         self.__dbFieldName = dbFieldName  # Field Name in DataBase
         self.__objectPropertyName = objectPropertyName  # Property Name in Task object
         self.__objectPropertyType = objectPropertyType  # (getter/setter)
-        self.__dbFieldType = dbFieldType  #  PRIMARY_KEY, UNIQ, FOREIGN_KEY
+        self.__dbFieldType = dbFieldType  # PRIMARY_KEY, UNIQ, FOREIGN_KEY
         self.__viewMappingType = viewMappingType  # SHOW or IGNORE this field in View
         self.__viewHeaderSign = viewHeaderSign  # Sign for header this column
         self.__formatFunction = formatFunction  # format function for display data in View
@@ -717,3 +661,27 @@ class OrmSettings:
     @property
     def dbFieldDataType(self):
         return self.__dbFieldDataType
+
+
+class AppendDataView:
+    def __init__(self, model, colNum, viewFunction, formatFunction=None):
+        self.__model=model
+        self.__colNum=colNum
+        self.__viewFunction = viewFunction
+        self.__formatFunction = formatFunction
+
+    @property
+    def rowNum(self):
+        return self.__model.rowCount()
+
+    @property
+    def colNum(self):
+        return self.__colNum
+
+    @property
+    def viewFunction(self):
+        return self.__viewFunction
+
+    @property
+    def formatFunction(self):
+        return self.__formatFunction

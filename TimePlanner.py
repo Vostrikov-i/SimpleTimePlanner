@@ -60,7 +60,8 @@ ormMappingFinished = (
                     cPl.ViewMapping.SHOW, "Work Time", workTimeFormat)
 )
 
-
+def anonFuncString():
+    return "Total time"
 
 class MainWin(QWidget):
     def __init__(self):
@@ -68,19 +69,25 @@ class MainWin(QWidget):
         self.dbConnector = cPl.DBConnector("timePlanner.db", "Task", ormMapping)
         self.taskStorage = cPl.TaskStorage(self.dbConnector, ormMapping);
         self.currentView = "Work"
-        self.check_box = QCheckBox('Minimize to Tray')
-        self.check_box.setChecked(True)
+        self.checkBox = QCheckBox('Minimize to Tray')
+        self.checkBox.setChecked(True)
         self.createModels()
         self.grid = QGridLayout()
         self.tray_icon = QSystemTrayIcon()
         self.tray_icon.setIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
         traySignal = "activated(QSystemTrayIcon::ActivationReason)"
         QObject.connect(self.tray_icon, SIGNAL(traySignal), self.__icon_activated)
+        #appendFunc = anonFuncString("Total time")
+        appendDataFinished = [
+            cPl.AppendDataView(self.finishedModel, 3, self.taskStorage.getTotalWorkTime, workTimeFormat),
+            cPl.AppendDataView(self.finishedModel, 2, anonFuncString)
+        ]
+        self.finishedModel.setAppendData(appendDataFinished)
+
         self.initUI()
-        workTimeFormat(86400)
 
     def hideEvent(self, event):
-        if self.check_box.isChecked():
+        if self.checkBox.isChecked():
             event.ignore()
             self.hide()
             self.tray_icon.show()
@@ -130,6 +137,7 @@ class MainWin(QWidget):
                      "border-style: dotted; border-color: black} "
         self.view.setStyleSheet(stylesheet)
         self.__resizeView()
+        #Create here else garbage collector clear it
         self.buttonStart = cPl.StartButtonDelegate(self.taskStorage, "taskId")
         self.buttonPause = cPl.PauseButtonDelegate(self.taskStorage, "taskId")
         self.buttonFinish = cPl.FinishButtonDelegate(self.taskStorage, "taskId")
@@ -148,10 +156,10 @@ class MainWin(QWidget):
 
         viewPanel = self.createTaskView(self.view)
         grid.addWidget(viewPanel, 1, 0)
-        buttonPanel = self.createButtonView(self)
+        buttonPanel = self.createButtonView()
         grid.addWidget(buttonPanel, 1, 1)
 
-        grid.addWidget(self.check_box, 2,0)
+        grid.addWidget(self.checkBox, 2,0)
         self.show()
 
     # Top panel - LineEdit for task name  + Add new task button
@@ -179,7 +187,7 @@ class MainWin(QWidget):
         viewPanel.setLayout(hBox)
         return viewPanel
 
-    def createButtonView(self, mainWin):
+    def createButtonView(self):
         buttons = []
         datePickers = []
         buttonPanel = QWidget()
@@ -305,8 +313,8 @@ class MainWin(QWidget):
         return call
 
     def createModels(self):
-        self.model = cPl.TaskModel(self.taskStorage, ormMapping, buttonData)  # передаем хранилище задач в модель
-        self.finishedModel = cPl.FinishedTaskModel(self.taskStorage, ormMappingFinished, buttonDataFinish)
+        self.model = cPl.TaskModel(self.taskStorage, ormMapping, 0, buttonData)  # передаем хранилище задач в модель
+        self.finishedModel = cPl.TaskModel(self.taskStorage, ormMappingFinished, 1, buttonDataFinish)
 
 
 if __name__ == '__main__':
