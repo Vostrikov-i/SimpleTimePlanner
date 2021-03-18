@@ -373,13 +373,14 @@ class TaskStorage:
 
 class TaskModel(QAbstractTableModel):
 
-    def __init__(self, taskStorage, ormMapping, appendRow=0, buttonData=[]):
+    def __init__(self, taskStorage, ormMapping, appendRow=0, buttonData=[], gui=None):
         super(TaskModel, self).__init__()
         self.__taskStorage = taskStorage
         self.__appendRow = appendRow
         self.__buttonData = buttonData
         self.__ormMapping = ormMapping
         self.__appendData= []
+        self.__gui = gui
         # create header sign
         self.__taskProp = list(filter(lambda x: x.viewMappingType == ViewMapping.SHOW and type(x.viewHeaderSign) == str,
                                       self.__ormMapping))
@@ -454,6 +455,13 @@ class TaskModel(QAbstractTableModel):
         return None
 
     def update(self):
+        if self.__gui is not None:
+            self.__gui.updateView()
+        else:
+            self.layoutAboutToBeChanged.emit()
+            self.layoutChanged.emit()
+
+    def refresh(self):
         self.layoutAboutToBeChanged.emit()
         self.layoutChanged.emit()
 

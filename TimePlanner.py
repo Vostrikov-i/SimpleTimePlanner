@@ -252,7 +252,7 @@ class MainWin(QWidget):
         def call_sql():
             if lineEdit.text() != "":
                 self.taskStorage.addTask(lineEdit.text())
-                self.model.update()
+                self.model.refresh()
 
         return call_sql
 
@@ -262,7 +262,7 @@ class MainWin(QWidget):
                 for filterElement in filterElements:
                     filterElement.setVisible(False)
                     self.taskStorage.viewAllFinishedTask()
-                    self.finishedModel.update()
+                    self.finishedModel.refresh()
             else:
                 for filterElement in filterElements:
                     filterElement.setVisible(True)
@@ -276,7 +276,7 @@ class MainWin(QWidget):
             startUTC = int(float(start.timestamp()))
             endUTC = int(float(end.timestamp()))
             self.finishedModel.switchToFilterData(startUTC, endUTC)
-            self.finishedModel.update()
+            self.finishedModel.refresh()
 
         return call
 
@@ -313,9 +313,11 @@ class MainWin(QWidget):
         return call
 
     def createModels(self):
-        self.model = cPl.TaskModel(self.taskStorage, ormMapping, 0, buttonData)  # передаем хранилище задач в модель
-        self.finishedModel = cPl.TaskModel(self.taskStorage, ormMappingFinished, 1, buttonDataFinish)
+        self.model = cPl.TaskModel(self.taskStorage, ormMapping, 0, buttonData, self)  # передаем хранилище задач в модель
+        self.finishedModel = cPl.TaskModel(self.taskStorage, ormMappingFinished, 1, buttonDataFinish, self)
 
+    def updateView(self):
+        self.view.update()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
