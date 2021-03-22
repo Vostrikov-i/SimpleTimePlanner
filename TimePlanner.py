@@ -7,7 +7,7 @@ from PySide2.QtWidgets import (QTableView, QApplication, QDateEdit, QHeaderView,
 from PySide2.QtWidgets import (QWidget, QGridLayout, QPushButton, QLineEdit, QVBoxLayout, QHBoxLayout, QLabel)
 import ClassesPlanner as cPl
 
-buttonData = ["Start", "Pause", "Finish"]
+buttonData = ["Start", "Pause", "Finish", "Delete"]
 buttonDataFinish = ["Delete"]
 TimeZone = (datetime.fromtimestamp(time.time()) - datetime.utcfromtimestamp(time.time())).total_seconds()  #
 
@@ -74,6 +74,7 @@ class MainWin(QWidget):
         self.createModels()
         self.grid = QGridLayout()
         self.tray_icon = QSystemTrayIcon()
+        self.tray_icon.setToolTip("Time Planner")
         self.tray_icon.setIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
         traySignal = "activated(QSystemTrayIcon::ActivationReason)"
         QObject.connect(self.tray_icon, SIGNAL(traySignal), self.__icon_activated)
@@ -104,6 +105,12 @@ class MainWin(QWidget):
             self.view.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
             self.view.setColumnWidth(1, 140)
             self.view.setColumnWidth(2, 70)
+
+            self.view.setColumnWidth(self.model.getHeaderLenght(), 70)
+            self.view.setColumnWidth(self.model.getHeaderLenght()+1, 70)
+            self.view.setColumnWidth(self.model.getHeaderLenght()+2, 70)
+            self.view.setColumnWidth(self.model.getHeaderLenght()+3, 70)
+
         else:
             self.view.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
             self.view.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
@@ -141,12 +148,13 @@ class MainWin(QWidget):
         self.buttonStart = cPl.StartButtonDelegate(self.taskStorage, "taskId")
         self.buttonPause = cPl.PauseButtonDelegate(self.taskStorage, "taskId")
         self.buttonFinish = cPl.FinishButtonDelegate(self.taskStorage, "taskId")
-        self.buttonDelete = cPl.DeleteButtonDelegate(self.taskStorage, "taskId")
+        self.buttonDelete = cPl.DeleteButtonDelegate(self.taskStorage, "taskId", self)
 
         if self.currentView == "Work":
             self.view.setItemDelegateForColumn(self.model.getHeaderLenght(), self.buttonStart)
             self.view.setItemDelegateForColumn(self.model.getHeaderLenght() + 1, self.buttonPause)
             self.view.setItemDelegateForColumn(self.model.getHeaderLenght() + 2, self.buttonFinish)
+            self.view.setItemDelegateForColumn(self.model.getHeaderLenght() + 3, self.buttonDelete)
             buttonCurrent.setChecked(True)
             buttonFinished.setChecked(False)
         else:

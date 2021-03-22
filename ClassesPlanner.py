@@ -4,7 +4,7 @@ import time, threading
 from collections import OrderedDict
 from PySide2.QtGui import *
 from PySide2.QtCore import *
-from PySide2.QtWidgets import QStyledItemDelegate, QStyleOptionButton, QStyle, QApplication
+from PySide2.QtWidgets import QStyledItemDelegate, QStyleOptionButton, QStyle, QApplication, QMessageBox
 
 
 class FilteredState:
@@ -592,12 +592,13 @@ class FinishButtonDelegate(QStyledItemDelegate):
 
 class DeleteButtonDelegate(QStyledItemDelegate):
 
-    def __init__(self, taskStorage, idPropertyName, parent=None):
+    def __init__(self, taskStorage, idPropertyName, gui=None, parent=None):
         super(DeleteButtonDelegate, self).__init__(parent)
         self._pressed = None
         self.__taskStorage = taskStorage
         self.__idPropertyName = idPropertyName
         self.__btn = QStyleOptionButton()
+        self.__gui = gui;
 
     def paint(self, painter, option, index):
         if index.data() is not None:
@@ -618,8 +619,14 @@ class DeleteButtonDelegate(QStyledItemDelegate):
                 self._pressed = None
             else:
                 self._pressed = (index.row(), index.column())
-                self.__taskStorage.deleteTask(id)
-                model.update()
+                if self.__gui is not None:
+                    confirm = QMessageBox.question(self.__gui, "Delete confimation", "Task will be deleted. Are you sure you want to do it?", QMessageBox.Yes, QMessageBox.No)
+                    if confirm == QMessageBox.Yes:
+                        self.__taskStorage.deleteTask(id)
+                        model.update()
+                else:
+                    self.__taskStorage.deleteTask(id)
+                    model.update()
             return True
         elif event.type() == QEvent.MouseButtonRelease:
             return True
